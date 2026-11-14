@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harstad</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e16; }
+  body { font: 300 14px/1.4 "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif; color: #fff; }
+  canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #title {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; cursor: pointer;
+    background: radial-gradient(ellipse at center, rgba(20, 22, 30, .15), rgba(20, 22, 30, .6));
+    transition: opacity 1.6s ease; user-select: none;
+  }
+  #title.gone { opacity: 0; pointer-events: none; }
+  #title h1 {
+    margin: 0; font-weight: 200; font-size: clamp(56px, 11vw, 150px);
+    letter-spacing: .32em; margin-right: -.32em; text-shadow: 0 2px 40px rgba(0, 0, 0, .45);
+  }
+  #title .sub { letter-spacing: .5em; margin-right: -.5em; opacity: .8; font-size: 13px; text-transform: uppercase; }
+  #title .go {
+    margin-top: 9vh; letter-spacing: .3em; margin-right: -.3em; font-size: 13px; text-transform: uppercase;
+    padding: 13px 30px; border: 1px solid rgba(255, 255, 255, .5); border-radius: 40px;
+    backdrop-filter: blur(6px); background: rgba(255, 255, 255, .07);
+  }
+  #title .keys { margin-top: 26px; opacity: .65; font-size: 12px; letter-spacing: .12em; }
+  #title kbd, #help kbd {
+    font: inherit; padding: 1px 6px; border: 1px solid rgba(255, 255, 255, .45); border-radius: 4px; margin: 0 1px;
+  }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1.5s ease; }
+  #hud.on { opacity: 1; }
+  #place { position: absolute; left: 34px; bottom: 30px; text-shadow: 0 1px 14px rgba(0, 0, 0, .55); }
+  #street { font-size: 30px; font-weight: 200; letter-spacing: .08em; min-height: 42px; transition: opacity .6s ease; }
+  #meta { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; opacity: .75; }
+  /* the road's speed limit, as the round sign */
+  #limit {
+    display: none; width: 24px; height: 24px; margin-right: 10px; border-radius: 50%; box-sizing: border-box; vertical-align: middle;
+    border: 3px solid #c8201c; background: #f4f2ea; color: #111; font: 600 11px/18px "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0; text-align: center; text-shadow: none;
+  }
+  #limit.on { display: inline-block; }
+  #map {
+    position: absolute; right: 30px; bottom: 30px; width: 150px; height: 150px; border-radius: 50%;
+    background: rgba(18, 24, 34, .42); border: 1px solid rgba(255, 255, 255, .28); backdrop-filter: blur(5px); overflow: hidden;
+  }
+  /* the whole town, drawn once; the compositor slides and turns it under the arrow */
+  #town { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; opacity: .9; }
+  #me { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  #help {
+    position: absolute; right: 34px; top: 26px; font-size: 11px; letter-spacing: .1em; opacity: .7;
+    text-align: right; line-height: 2; transition: opacity 2s ease; text-shadow: 0 1px 8px rgba(0, 0, 0, .5);
+  }
+  #help.dim { opacity: 0; }
+  /* settings: O, or the button in the corner */
+  #gear {
+    position: fixed; left: 26px; top: 22px; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; z-index: 3;
+    border: 1px solid rgba(255, 255, 255, .3); background: rgba(18, 24, 34, .4); color: #fff; font-size: 15px; line-height: 28px;
+    text-align: center; opacity: .55; backdrop-filter: blur(5px); user-select: none;
+  }
+  #gear:hover { opacity: .9; }
+  #settings {
+    position: fixed; left: 26px; top: 64px; z-index: 3; display: none; min-width: 270px; padding: 16px 20px; border-radius: 14px;
+    background: rgba(14, 18, 28, .78); border: 1px solid rgba(255, 255, 255, .18); backdrop-filter: blur(10px);
+    font-size: 12px; letter-spacing: .08em;
+  }
+  #settings.on { display: block; }
+  #settings h2 { margin: 0 0 10px; font-weight: 300; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
+  #settings label { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 9px 0; }
+  #settings input[type=range] { width: 130px; accent-color: #ffb46a; }
+  #settings input[type=checkbox] { accent-color: #ffb46a; width: 15px; height: 15px; }
+  #settings select { background: #1a2030; color: #fff; border: 1px solid rgba(255, 255, 255, .25); border-radius: 6px; font: inherit; padding: 2px 6px; }
+  #settings .note { opacity: .5; font-size: 10px; margin-top: 10px; }
+  #toast {
+    position: absolute; left: 50%; top: 12%; transform: translateX(-50%); font-size: 12px; letter-spacing: .3em;
+    text-transform: uppercase; opacity: 0; transition: opacity .5s ease; text-shadow: 0 1px 12px rgba(0, 0, 0, .7);
+    white-space: nowrap;
+  }
+  #toast.on { opacity: .9; }
+  #credit {
+    position: fixed; left: 50%; bottom: 6px; transform: translateX(-50%); font-size: 9px; opacity: .45;
+    letter-spacing: .04em; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="place">
+    <div id="street"></div>
+    <div id="meta"><span id="limit"></span>Harstad · <span id="speed">0</span> km/t<span id="alt"></span></div>
+  </div>
+  <div id="map"><canvas id="town" width="1" height="1"></canvas><svg id="me" viewBox="0 0 300 300"><path d="M150 137L158 159L150 154L142 159Z" fill="#ffb46a"/></svg></div>
+  <div id="toast"></div>
+  <div id="help">
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> brake<br>
+    <kbd>C</kbd> or <kbd>1</kbd>–<kbd>8</kbd> camera · <kbd>R</kbd> back to road · <kbd>M</kbd> sound · <kbd>N</kbd> music · <kbd>H</kbd> hide · <kbd>O</kbd> settings<br>
+    <kbd>F</kbd> flight · <kbd>Space</kbd> climb · <kbd>Shift</kbd> descend<br>
+    Gamepad: <kbd>RT</kbd> drive · <kbd>LT</kbd> brake, reverse · <kbd>A</kbd> handbrake · right stick look<br>
+    <kbd>LB</kbd><kbd>RB</kbd> camera · <kbd>Y</kbd> flight · <kbd>B</kbd> back to road
+  </div>
+</div>
+
+<div id="gear" title="Settings (O)">⚙</div>
+<div id="settings">
+  <h2>Settings</h2>
+  <label>Snowfall <span><input id="s-snow" type="range" min="0" max="8" step="0.5"> <span id="s-snow-v"></span></span></label>
+  <label>Gusts over the roofs <input id="s-gusts" type="checkbox"></label>
+  <label>Anti-aliasing <select id="s-aa"><option value="1">Off</option><option value="4">4× MSAA</option></select></label>
+  <label>Sound <input id="s-sound" type="checkbox"></label>
+  <label>Music <input id="s-music" type="checkbox"></label>
+  <label>Show the HUD <input id="s-hud" type="checkbox"></label>
+  <div class="note">O to close · anti-aliasing reloads the game where you are</div>
+</div>
+
+<div id="title">
+  <div class="sub">68.80° N · 16.54° E · mørketid</div>
+  <h1>HARSTAD</h1>
+  <div class="go" id="go">Loading…</div>
+  <div class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive — sound on</div>
+</div>
+
+<div id="credit">Imagery © Esri, Maxar, Earthstar Geographics · Map data © OpenStreetMap contributors · Elevation: Mapzen / Kartverket</div>
+
+<!-- the game: C compiled to wasm, drawn with WebGPU. `make serve` -->
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
